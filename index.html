@@ -158,7 +158,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_WCKu2igBhJy_7MOB4dhX8g_fMom3yby";
 (function(){
   const $ = id => document.getElementById(id);
   const configurado = SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.startsWith("COLE_") && window.supabase;
-  const db = configurado ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+  const db = configurado ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }) : null;
 
   function lerLocal(k, padrao){ try { return JSON.parse(localStorage.getItem(k)) ?? padrao; } catch(e){ return padrao; } }
   function salvarLocal(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
@@ -257,7 +257,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_WCKu2igBhJy_7MOB4dhX8g_fMom3yby";
       const nome = $(nomeId).value.trim() || "Visitante";
       const { error } = await db.from("comentarios").insert({ tipo, nome, texto });
       botao.disabled = false;
-      if(error){ aviso(listaId, "Não foi possível enviar. Tente novamente.", true); return; }
+      if(error){ console.error("Erro ao enviar:", error); aviso(listaId, "Não foi possível enviar (" + (error.message || "erro") + ").", true); return; }
       $(nomeId).value = ""; $(textoId).value = "";
       aviso(listaId, "Obrigado! Sua mensagem foi enviada e aparecerá aqui após aprovação.", false);
     });
