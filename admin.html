@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>O Som da Magia | Moderação</title>
+<style>
+:root{--navy:#102e4f;--purple:#624a93;--blue:#2c7c9f;--green:#2e8b57;--red:#c0392b;--bg:#f7f8fb;--muted:#657589;--line:#e7ebf1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#26384b;font-family:Arial,Helvetica,sans-serif;line-height:1.5}
+.wrap{width:min(900px,calc(100% - 32px));margin:32px auto}
+h1{color:var(--navy);margin:0 0 4px;font-size:26px}.sub{color:var(--muted);margin:0 0 24px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 10px 30px #102e4f0b}
+input{width:100%;padding:12px 14px;border:1px solid #d8e0e8;border-radius:12px;font:inherit;margin-bottom:10px}
+button{padding:10px 16px;border:0;border-radius:10px;font-weight:800;cursor:pointer;color:#fff;background:var(--navy)}
+button:disabled{opacity:.5;cursor:default}
+.ok{background:var(--green)}.del{background:var(--red)}.ghost{background:#e8edf3;color:var(--navy)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+.tab{background:#e8edf3;color:var(--navy)}.tab.on{background:var(--purple);color:#fff}
+.item{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+.item .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.item strong{color:var(--navy)}.item small{color:var(--muted)}
+.item .txt{margin:8px 0 12px;white-space:pre-wrap;word-break:break-word}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;background:#efe9f8;color:var(--purple);font-weight:800}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.msg{color:var(--red);min-height:20px}.empty{color:var(--muted);text-align:center;padding:30px}
+.count{background:var(--red);color:#fff;border-radius:99px;padding:0 7px;font-size:12px;margin-left:4px}
+.hidden{display:none}
+</style></head><body>
+<div class="wrap">
+  <h1>🔐 Moderação de comentários</h1>
+  <p class="sub">O Som da Magia: aprove ou exclua o que os visitantes enviaram.</p>
+
+  <div class="card" id="login">
+    <input id="email" type="email" placeholder="E-mail" autocomplete="username">
+    <input id="senha" type="password" placeholder="Senha" autocomplete="current-password">
+    <button id="entrar">Entrar</button>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+
+  <div id="painel" class="hidden">
+    <div class="bar">
+      <button class="tab on" data-f="pendentes">Pendentes <span class="count" id="nPend">0</span></button>
+      <button class="tab" data-f="aprovados">Publicados</button>
+      <span style="flex:1"></span>
+      <button class="ghost" id="atualizar">↻ Atualizar</button>
+      <button class="ghost" id="sair">Sair</button>
+    </div>
+    <div id="lista"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://bxpctkpbubwyepozzepq.supabase.co";
+const SUPABASE_ANON_KEY = "COLE_AQUI_A_ANON_KEY";
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id);
+let filtro = "pendentes";
+
+async function entrar(){
+  $("loginMsg").textContent = "";
+  const { error } = await db.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+  if(error){ $("loginMsg").textContent = "E-mail ou senha incorretos."; return; }
+  mostrarPainel();
+}
+
+function mostrarPainel(){
+  $("login").classList.add("hidden");
+  $("painel").classList.remove("hidden");
+  carregar();
+  db.channel("moderacao")
+    .on("postgres_changes", { event: "*", schema: "public", table: "comentarios" }, carregar)
+    .subscribe();
+}
+
+async function carregar(){
+  const { data, error } = await db.from("comentarios").select("*").order("created_at", { ascending: false });
+  if(error){ $("lista").innerHTML = '<p class="msg">Erro ao carregar: ' + error.message + '</p>'; return; }
+  const pend = data.filter(r => !r.aprovado);
+  $("nPend").textContent = pend.length;
+  const itens = filtro === "pendentes" ? pend : data.filter(r => r.aprovado);
+  const box = $("lista"); box.innerHTML = "";
+  if(!itens.length){
+    box.innerHTML = '<div class="empty">' + (filtro === "pendentes" ? "Nada aguardando aprovação 🎉" : "Nenhum comentário publicado ainda.") + '</div>';
+    return;
+  }
+  itens.forEach(r => box.appendChild(cartao(r)));
+}
+
+function cartao(r){
+  const el = document.createElement("div"); el.className = "item";
+  const top = document.createElement("div"); top.className = "top";
+  const quem = document.createElement("div");
+  const n = document.createElement("strong"); n.textContent = r.nome || "Visitante";
+  const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = r.tipo === "ideia" ? "💡 Ideia" : "💬 Comentário";
+  quem.append(n, " ", tag);
+  const d = document.createElement("small"); d.textContent = new Date(r.created_at).toLocaleString("pt-BR");
+  top.append(quem, d);
+  const txt = document.createElement("div"); txt.className = "txt"; txt.textContent = r.texto;
+  const ac = document.createElement("div"); ac.className = "actions";
+
+  if(!r.aprovado){
+    const ok = document.createElement("button"); ok.className = "ok"; ok.textContent = "✓ Aprovar";
+    ok.onclick = () => acao(ok, () => db.from("comentarios").update({ aprovado: true }).eq("id", r.id));
+    ac.append(ok);
+  } else {
+    const ret = document.createElement("button"); ret.className = "ghost"; ret.textContent = "Ocultar do site";
+    ret.onclick = () => acao(ret, () => db.from("comentarios").update({ aprovado: false }).eq("id", r.id));
+    ac.append(ret);
+  }
+  const del = document.createElement("button"); del.className = "del"; del.textContent = "🗑 Excluir";
+  del.onclick = () => {
+    if(del.dataset.confirm){ acao(del, () => db.from("comentarios").delete().eq("id", r.id)); }
+    else { del.dataset.confirm = "1"; del.textContent = "Clique de novo para confirmar"; setTimeout(() => { delete del.dataset.confirm; del.textContent = "🗑 Excluir"; }, 4000); }
+  };
+  ac.append(del);
+  el.append(top, txt, ac);
+  return el;
+}
+
+async function acao(btn, fn){
+  btn.disabled = true;
+  const { error } = await fn();
+  if(error){ btn.disabled = false; btn.textContent = "Erro: " + error.message; return; }
+  carregar();
+}
+
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+  t.classList.add("on"); filtro = t.dataset.f; carregar();
+});
+$("entrar").onclick = entrar;
+$("senha").addEventListener("keydown", e => { if(e.key === "Enter") entrar(); });
+$("atualizar").onclick = carregar;
+$("sair").onclick = async () => { await db.auth.signOut(); location.reload(); };
+
+db.auth.getSession().then(({ data }) => { if(data.session) mostrarPainel(); });
+</script>
+</body></html>
